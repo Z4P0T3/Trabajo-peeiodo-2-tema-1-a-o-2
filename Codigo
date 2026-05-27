@@ -1,0 +1,143 @@
+def trimf(x, a, b, c):
+    """Función de membresía triangular"""
+    if x <= a:
+        return 0.0
+    elif a < x <= b:
+        return (x - a) / (b - a)
+    elif b < x < c:
+        return (c - x) / (c - b)
+    else:
+        return 0.0
+
+# ---------- Variables lingüísticas ----------
+# Stock (0 a 100)
+def stock_bajo(x): return trimf(x, 0, 0, 40)
+def stock_medio(x): return trimf(x, 20, 50, 80)
+def stock_alto(x): return trimf(x, 60, 100, 100)
+
+# Velocidad ventas (0 a 50)
+def ventas_lenta(x): return trimf(x, 0, 0, 15)
+def ventas_normal(x): return trimf(x, 10, 20, 35)
+def ventas_rapida(x): return trimf(x, 30, 50, 50)
+
+# Tiempo reposición (0 a 30)
+def repo_corto(x): return trimf(x, 0, 0, 7)
+def repo_medio(x): return trimf(x, 5, 10, 15)
+def repo_largo(x): return trimf(x, 12, 30, 30)
+
+# Prioridad (0 a 100) - para defuzzificación
+def prioridad_baja(x): return trimf(x, 0, 0, 30)
+def prioridad_media(x): return trimf(x, 20, 50, 70)
+def prioridad_alta(x): return trimf(x, 60, 80, 90)
+def prioridad_urgente(x): return trimf(x, 80, 100, 100)
+
+# ---------- Evaluación de reglas ----------
+def evaluar_reglas(stock_val, ventas_val, repo_val):
+    # Antecedentes
+    bajo = stock_bajo(stock_val)
+    medio = stock_medio(stock_val)
+    alto = stock_alto(stock_val)
+    lenta = ventas_lenta(ventas_val)
+    normal = ventas_normal(ventas_val)
+    rapida = ventas_rapida(ventas_val)
+    corto = repo_corto(repo_val)
+    largo = repo_largo(repo_val)
+    
+    # Reglas (operador AND = mínimo)
+    # Regla 1: stock bajo & ventas rápida & repo largo -> urgente
+    act1 = min(bajo, rapida, largo)
+    # Regla 2: bajo & rapida & repo medio -> alta
+    act2 = min(bajo, rapida, repo_medio(repo_val))
+    # Regla 3: bajo & normal -> alta
+    act3 = min(bajo, normal)
+    # Regla 4: bajo & lenta -> media
+    act4 = min(bajo, lenta)
+    # Regla 5: medio & rapida & largo -> alta
+    act5 = min(medio, rapida, largo)
+    # Regla 6: medio & normal -> media
+    act6 = min(medio, normal)
+    # Regla 7: medio & lenta -> baja
+    act7 = min(medio, lenta)
+    # Regla 8: alto & lenta -> baja
+    act8 = min(alto, lenta)
+    # Regla 9: alto & normal -> baja
+    act9 = min(alto, normal)
+    # Regla 10: alto & rapida -> media
+    act10 = min(alto, rapida)
+    # Regla 11: repo corto & medio -> baja
+    act11 = min(corto, medio)
+    # Regla 12: repo corto & bajo -> media
+    act12 = min(corto, bajo)
+    
+    # Activaciones por consecuente
+    urgente_act = act1
+    alta_act = max(act2, act3, act5)
+    media_act = max(act4, act6, act10, act12)
+    baja_act = max(act7, act8, act9, act11)
+    
+    return baja_act, media_act, alta_act, urgente_act
+
+# ---------- Defuzzificación por centroide ----------
+def defuzzificar(baja_act, media_act, alta_act, urgente_act):
+    """Calcula prioridad usando centroide de conjuntos recortados"""
+    paso = 0.5
+    x = 0.0
+    numerador = 0.0
+    denominador = 0.0
+    
+    while x <= 100:
+        # Miembros de cada conjunto recortado al nivel de activación
+        miembro_baja = min(baja_act, prioridad_baja(x))
+        miembro_media = min(media_act, prioridad_media(x))
+        miembro_alta = min(alta_act, prioridad_alta(x))
+        miembro_urgente = min(urgente_act, prioridad_urgente(x))
+        
+        agregado = max(miembro_baja, miembro_media, miembro_alta, miembro_urgente)
+        numerador += x * agregado
+        denominador += agregado
+        x += paso
+    
+    if denominador == 0:
+        return 0
+    return numerador / denominador
+
+# ---------- Función principal ----------
+def calcular_prioridad(stock_val, ventas_val, repo_val):
+    # Validar rangos
+    stock_val = max(0, min(100, stock_val))
+    ventas_val = max(0, min(50, ventas_val))
+    repo_val = max(0, min(30, repo_val))
+    
+    baja_act, media_act, alta_act, urgente_act = evaluar_reglas(stock_val, ventas_val, repo_val)
+    prioridad = defuzzificar(baja_act, media_act, alta_act, urgente_act)
+    return prioridad
+
+def texto_prioridad(p):
+    if p >= 80: return "URGENTE"
+    if p >= 60: return "ALTA"
+    if p >= 30: return "MEDIA"
+    return "BAJA"
+
+# ========== EJECUCIÓN DE PRUEBAS (para el video) ==========
+if __name__ == "__main__":
+    print("=" * 50)
+    print("SISTEMA DIFUSO DE PRIORIDAD DE COMPRA")
+    print("=" * 50)
+    
+    casos = [
+        (15, 35, 14, "Crítico (poco stock, ventas rápidas, reposición larga)"),
+        (80, 5, 3, "Tranquilo (mucho stock, ventas lentas, reposición corta)"),
+        (50, 20, 7, "Normal (stock medio, ventas normales)"),
+        (0, 50, 30, "Extremo (sin stock, ventas máximas, reposición larga)"),
+        (95, 40, 2, "Stock alto pero ventas rápidas y reposición corta")
+    ]
+    
+    for stock_val, ventas_val, repo_val, desc in casos:
+        prio = calcular_prioridad(stock_val, ventas_val, repo_val)
+        texto = texto_prioridad(prio)
+        print(f"\n📦 {desc}")
+        print(f"   Stock: {stock_val} | Ventas/día: {ventas_val} | Reposición: {repo_val} días")
+        print(f"   ➜ Prioridad = {prio:.1f}% ({texto})")
+    
+    print("\n" + "=" * 50)
+    print("✅ Sistema ejecutado correctamente")
